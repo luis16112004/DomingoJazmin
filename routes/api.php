@@ -1,59 +1,56 @@
-Route::get('/debug', function () {
-    try {
-        // Verificar variables de entorno
-        $hasCredentialsEnv = !empty(env('FIREBASE_CREDENTIALS_JSON'));
-        $credentialsLength = $hasCredentialsEnv ? strlen(env('FIREBASE_CREDENTIALS_JSON')) : 0;
-        
-        // Verificar archivo
-        $credentialsPath = base_path('firebase_credentials.json');
-        $hasCredentialsFile = file_exists($credentialsPath);
-        
-        // Verificar si podemos crear el archivo desde env
-        $canCreateFromEnv = false;
-        if ($hasCredentialsEnv) {
-            try {
-                $tempPath = sys_get_temp_dir() . '/firebase_test.json';
-                file_put_contents($tempPath, env('FIREBASE_CREDENTIALS_JSON'));
-                $canCreateFromEnv = file_exists($tempPath);
-                if ($canCreateFromEnv) {
-                    $content = json_decode(file_get_contents($tempPath), true);
-                    $hasPrivateKey = isset($content['private_key']);
-                    unlink($tempPath);
-                } else {
-                    $hasPrivateKey = false;
-                }
-            } catch (\Exception $e) {
-                $hasPrivateKey = false;
-            }
-        } else {
-            $hasPrivateKey = false;
-        }
-        
-        return response()->json([
-            'status' => 'debug_info',
-            'firebase' => [
-                'env_variable_exists' => $hasCredentialsEnv,
-                'env_variable_length' => $credentialsLength,
-                'file_exists' => $hasCredentialsFile,
-                'can_create_from_env' => $canCreateFromEnv,
-                'has_private_key' => $hasPrivateKey,
-                'database_url' => env('FIREBASE_DATABASE_URL'),
-            ],
-            'app' => [
-                'env' => app()->environment(),
-                'debug' => config('app.debug'),
-                'key_set' => !empty(config('app.key')),
-            ],
-            'php' => [
-                'version' => PHP_VERSION,
-                'temp_dir' => sys_get_temp_dir(),
-                'temp_writable' => is_writable(sys_get_temp_dir()),
-            ]
-        ]);
-    } catch (\Exception $e) {
-        return response()->json([
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ], 500);
-    }
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\ProviderController;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Middleware\FirebaseTokenMiddleware;
+
+// Rutas públicas (sin autenticación)
+Route::get('/health', function () {
+    return response()->json([
+        'status' => 'ok',
+        'message' => 'API funcionando correctamente',
+        'timestamp' => now()
+    ]);
+});
+
+// ========== RUTAS DE AUTENTICACIÓN (Públicas) ==========
+Route::prefix('auth')->group(function () {
+    Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/verify', [AuthController::class, 'verifyToken']);
+});
+
+// Rutas protegidas (requieren autenticación de Firebase)
+Route::middleware([FirebaseTokenMiddleware::class])->group(function () {
+    
+    // Información del usuario autenticado
+    Route::get('/auth/me', [AuthController::class, 'me']);
+    
+    // Gestión de usuarios (solo admin)
+    Route::get('/auth/users', [AuthController::class, 'listarUsuarios']);
+    Route::put('/auth/users/{uid}', [AuthController::class, 'actualizarUsuario']);
+    
+    // Rutas de ventas
+    Route::post('/ventas', [ProviderController::class, 'registrarVenta']);
+    Route::get('/ventas', [ProviderController::class, 'obtenerVentas']);
+    
+    // Rutas de productos
+    Route::post('/productos', [ProviderController::class, 'registrarProducto']);
+    Route::get('/productos', [ProviderController::class, 'obtenerProductos']);
+});
+
+// ⭐ Rutas para DESARROLLO (sin autenticación)
+// IMPORTANTE: Eliminar estas rutas en producción
+Route::prefix('dev')->group(function () {
+    // GET - Consultar
+    Route::get('/productos', [ProviderController::class, 'obtenerProductos']);
+    Route::get('/ventas', [ProviderController::class, 'obtenerVentas']);
+    
+    // POST - Crear
+    Route::post('/productos', [ProviderController::class, 'registrarProducto']);
+    Route::post('/ventas', [ProviderController::class, 'registrarVenta']);
+    
+    // Usuarios (desarrollo)
+    Route::post('/register', [AuthController::class, 'register']);
+    Route::get('/users', [AuthController::class, 'listarUsuarios']);
 });
