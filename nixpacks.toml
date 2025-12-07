@@ -6,13 +6,11 @@ cmds = ['composer install --no-dev --optimize-autoloader']
 
 [phases.build]
 cmds = [
-    'mkdir -p storage/framework/{sessions,views,cache}',
+    'mkdir -p storage/framework/{sessions,views,cache/data}',
     'mkdir -p storage/logs',
     'mkdir -p bootstrap/cache',
-    'chmod -R 775 storage bootstrap/cache',
-    'touch database/database.sqlite',
-    'chmod 664 database/database.sqlite'
+    'chmod -R 775 storage bootstrap/cache'
 ]
 
 [start]
-cmd = 'php artisan config:clear && php artisan cache:clear && php artisan route:clear && php artisan serve --host=0.0.0.0 --port=${PORT:-8000}'
+cmd = 'php artisan serve --host=0.0.0.0 --port=${PORT:-8000}'
